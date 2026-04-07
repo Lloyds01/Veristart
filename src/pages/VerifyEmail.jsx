@@ -45,7 +45,8 @@ export default function VerifyEmail() {
       await verifyOTP({ email, otp: code })
       navigate('/login', { state: { verified: true } })
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid code. Please try again.')
+      const msg = err.response?.data?.message || err.response?.data?.detail || 'Invalid code. Please try again.'
+      setError(msg)
       setOtp(['', '', '', '', '', ''])
       inputs.current[0]?.focus()
     } finally {

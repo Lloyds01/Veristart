@@ -20,10 +20,11 @@ export function AuthProvider({ children }) {
     const { data } = await apiLogin(credentials)
     localStorage.setItem('access_token', data.access)
     localStorage.setItem('refresh_token', data.refresh)
-    localStorage.setItem('user', JSON.stringify(data.user))
+    const user = { ...data.user, full_name: `${data.user?.first_name || ''} ${data.user?.last_name || ''}`.trim() }
+    localStorage.setItem('user', JSON.stringify(user))
     setToken(data.access)
-    setUser(data.user)
-    return data.user
+    setUser(user)
+    return user
   }, [])
 
   const signup = useCallback(async (payload) => {

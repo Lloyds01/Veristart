@@ -7,6 +7,8 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import VerifyEmail from './pages/VerifyEmail'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import Pricing from './pages/Pricing'
 
 // Dashboard
@@ -49,6 +51,8 @@ function AppRoutes() {
         <Route path="/login" element={<PageWrapper><Login /></PageWrapper>} />
         <Route path="/signup" element={<PageWrapper><Signup /></PageWrapper>} />
         <Route path="/verify-email" element={<PageWrapper><VerifyEmail /></PageWrapper>} />
+        <Route path="/forgot-password" element={<PageWrapper><ForgotPassword /></PageWrapper>} />
+        <Route path="/reset-password" element={<PageWrapper><ResetPassword /></PageWrapper>} />
         <Route path="/pricing" element={<PageWrapper><Pricing /></PageWrapper>} />
 
         {/* Founder Dashboard */}

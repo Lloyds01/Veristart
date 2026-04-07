@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, CheckCircle2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import GoldButton from '../components/common/GoldButton'
@@ -18,6 +18,8 @@ export default function Login() {
   const [apiError, setApiError] = useState('')
   const { login } = useAuth()
   const navigate = useNavigate()
+  const { state } = useLocation()
+  const justVerified = state?.verified
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({ resolver: zodResolver(schema) })
 
@@ -27,7 +29,8 @@ export default function Login() {
       const user = await login(data)
       navigate(user.role === 'INVESTOR' ? '/investor/dashboard' : '/dashboard')
     } catch (err) {
-      setApiError(err.response?.data?.detail || 'Invalid credentials. Please try again.')
+      const msg = err.response?.data?.message || err.response?.data?.detail || 'Invalid credentials. Please try again.'
+      setApiError(msg)
     }
   }
 
@@ -83,6 +86,12 @@ export default function Login() {
             <p className="text-slate-400 text-sm">Sign in to your Veristart account</p>
           </div>
 
+          {justVerified && (
+            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm flex items-center gap-2">
+              <CheckCircle2 size={16} /> Email verified successfully. You can now sign in.
+            </div>
+          )}
+
           {apiError && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
               {apiError}
@@ -94,7 +103,7 @@ export default function Login() {
               <label className="text-sm text-slate-300 mb-1.5 block">Email address</label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input {...register('email')} type="email" placeholder="you@startup.com"
+                <input {...register('email')} type="text" inputMode="email" placeholder="you@startup.com"
                   className="w-full bg-navy-800 border border-navy-700 rounded-lg pl-10 pr-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-gold-500 transition-colors" />
               </div>
               {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email.message}</p>}
