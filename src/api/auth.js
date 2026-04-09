@@ -9,3 +9,4 @@ export const resetPassword = (data) => client.post('/auth/otp-reset-password/', 
 export const changePassword = (data) => client.post('/auth/change-password/', data)
 export const refreshToken = (data) => client.post('/auth/token/refresh/', data)
 export const logout = () => client.post('/auth/logout/')
+export const joinWaitlist = (data) => client.post('/auth/waitlist/', data)
