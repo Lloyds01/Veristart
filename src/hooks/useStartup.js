@@ -1,23 +1,27 @@
 import { useState, useEffect } from 'react'
-import { getMyProfile, updateProfile } from '../api/startup'
+import { getProfile, updateProfile, getHealthScore } from '../api/startup'
 
 export function useStartup() {
   const [startup, setStartup] = useState(null)
+  const [healthScore, setHealthScore] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    getMyProfile()
-      .then(({ data }) => setStartup(data))
+    Promise.all([getProfile(), getHealthScore()])
+      .then(([profileRes, healthRes]) => {
+        setStartup(profileRes.data)
+        setHealthScore(healthRes.data.health_score)
+      })
       .catch((err) => setError(err))
       .finally(() => setLoading(false))
   }, [])
 
   const update = async (data) => {
-    const { data: updated } = await updateProfile(startup.id, data)
+    const { data: updated } = await updateProfile(data)
     setStartup(updated)
     return updated
   }
 
-  return { startup, loading, error, update, setStartup }
+  return { startup, healthScore, loading, error, update, setStartup }
 }

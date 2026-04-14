@@ -3,7 +3,7 @@ import { NavLink, useNavigate, Outlet } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Building2, Users, BarChart3, FileText,
-  Wallet, Settings, LogOut, Menu, X, Zap, ChevronRight
+  Wallet, Settings, LogOut, Menu, X, Zap, CreditCard
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 
@@ -14,6 +14,7 @@ const NAV = [
   { to: '/dashboard/financials', icon: BarChart3, label: 'Financial Data' },
   { to: '/dashboard/pitch', icon: FileText, label: 'Pitch Documents' },
   { to: '/dashboard/funding', icon: Wallet, label: 'Funding Marketplace' },
+  { to: '/dashboard/creditors', icon: CreditCard, label: 'Creditors' },
   { to: '/dashboard/settings', icon: Settings, label: 'Settings' },
 ]
 

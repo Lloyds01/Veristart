@@ -10,6 +10,7 @@ import VerifyEmail from './pages/VerifyEmail'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Pricing from './pages/Pricing'
+import Waitlist from './pages/Waitlist'
 
 // Dashboard
 import DashboardLayout from './components/dashboard/DashboardLayout'
@@ -19,6 +20,7 @@ import Team from './pages/founder/Team'
 import Financials from './pages/founder/Financials'
 import PitchGenerator from './pages/founder/PitchGenerator'
 import FundingMarketplace from './pages/founder/FundingMarketplace'
+import Creditors from './pages/founder/Creditors'
 import Settings from './pages/founder/Settings'
 
 // Investor
@@ -54,6 +56,7 @@ function AppRoutes() {
         <Route path="/forgot-password" element={<PageWrapper><ForgotPassword /></PageWrapper>} />
         <Route path="/reset-password" element={<PageWrapper><ResetPassword /></PageWrapper>} />
         <Route path="/pricing" element={<PageWrapper><Pricing /></PageWrapper>} />
+        <Route path="/waitlist" element={<PageWrapper><Waitlist /></PageWrapper>} />
 
         {/* Founder Dashboard */}
         <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
@@ -63,6 +66,7 @@ function AppRoutes() {
           <Route path="financials" element={<Financials />} />
           <Route path="pitch" element={<PitchGenerator />} />
           <Route path="funding" element={<FundingMarketplace />} />
+          <Route path="creditors" element={<Creditors />} />
           <Route path="settings" element={<Settings />} />
         </Route>
 

@@ -1,7 +1,6 @@
 import client from './client'
 
-export const createProfile = (data) => client.post('/startups/', data)
-export const updateProfile = (id, data) => client.patch(`/startups/${id}/`, data)
-export const getProfile = (id) => client.get(`/startups/${id}/`)
-export const getMyProfile = () => client.get('/startups/me/')
+export const getProfile = () => client.get('/startup/profile/')
+export const updateProfile = (data) => client.patch('/startup/profile/update/', data)
+export const getHealthScore = () => client.get('/startup/profile/health-score/')
 export const listStartups = (params) => client.get('/startups/', { params })

@@ -1,6 +1,5 @@
 import client from './client'
 
-export const listMembers = (startupId) => client.get(`/startups/${startupId}/team/`)
-export const addMember = (startupId, data) => client.post(`/startups/${startupId}/team/`, data)
-export const updateMember = (startupId, memberId, data) => client.patch(`/startups/${startupId}/team/${memberId}/`, data)
-export const removeMember = (startupId, memberId) => client.delete(`/startups/${startupId}/team/${memberId}/`)
+export const listMembers = () => client.get('/startup/team/')
+export const addMember = (data) => client.post('/startup/team/add/', data)
+export const updateMemberHeadshot = (memberId, data) => client.patch(`/startup/team/${memberId}/headshot/`, data)
