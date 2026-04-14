@@ -20,6 +20,7 @@ import Team from './pages/founder/Team'
 import Financials from './pages/founder/Financials'
 import PitchGenerator from './pages/founder/PitchGenerator'
 import FundingMarketplace from './pages/founder/FundingMarketplace'
+import Creditors from './pages/founder/Creditors'
 import Settings from './pages/founder/Settings'
 
 // Investor
@@ -65,6 +66,7 @@ function AppRoutes() {
           <Route path="financials" element={<Financials />} />
           <Route path="pitch" element={<PitchGenerator />} />
           <Route path="funding" element={<FundingMarketplace />} />
+          <Route path="creditors" element={<Creditors />} />
           <Route path="settings" element={<Settings />} />
         </Route>
 
