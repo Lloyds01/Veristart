@@ -55,7 +55,15 @@ export default function Profile() {
           business_model: data.business_model || '',
         })
       })
-      .catch(() => {})
+      .catch((err) => {
+        const status = err?.response?.status
+        const detail = err?.response?.data?.detail || ''
+        if (status === 404 && detail.includes('FOUNDER')) {
+          // Investor landed here — redirect to their dashboard
+          window.location.href = '/investor/dashboard'
+        }
+        // Any other error — still stop the spinner
+      })
       .finally(() => setLoading(false))
   }, [])
 
