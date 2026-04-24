@@ -1,38 +1,57 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { Eye, EyeOff, Mail, Lock, CheckCircle2 } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, CheckCircle2, AlertCircle } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import GoldButton from '../components/common/GoldButton'
 
-const schema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-})
-
 export default function Login() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [apiError, setApiError] = useState('')
+  const [errors, setErrors] = useState({})
   const { login } = useAuth()
   const navigate = useNavigate()
   const { state } = useLocation()
   const justVerified = state?.verified
+  const passwordReset = state?.passwordReset
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({ resolver: zodResolver(schema) })
+  const validate = () => {
+    const errs = {}
+    if (!email || !/\S+@\S+\.\S+/.test(email)) errs.email = 'Valid email is required'
+    if (!password || password.length < 6) errs.password = 'Password is required'
+    return errs
+  }
 
-  const onSubmit = async (data) => {
+  const handleSubmit = async () => {
+    const errs = validate()
+    if (Object.keys(errs).length > 0) { setErrors(errs); return }
+    setLoading(true)
     setApiError('')
     try {
-      const user = await login(data)
+      const user = await login({ email, password })
+      // user.role comes from user_type mapped in AuthContext
       navigate(user.role === 'INVESTOR' ? '/investor/dashboard' : '/dashboard')
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data?.detail || 'Invalid credentials. Please try again.'
+      const status = err?.response?.status
+      const data = err?.response?.data
+
+      if (status === 412) {
+        // Account not verified — redirect to verify page
+        navigate('/verify-email', { state: { email } })
+        return
+      }
+
+      const msg = data?.message || data?.detail || 'Invalid credentials. Please try again.'
       setApiError(msg)
+    } finally {
+      setLoading(false)
     }
   }
+
+  const inputClass = 'w-full bg-navy-800 border border-navy-700 rounded-lg pl-10 pr-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-gold-500 transition-colors'
 
   return (
     <div className="min-h-screen flex">
@@ -92,21 +111,29 @@ export default function Login() {
             </div>
           )}
 
-          {apiError && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-              {apiError}
+          {passwordReset && (
+            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm flex items-center gap-2">
+              <CheckCircle2 size={16} /> Password reset successfully. Sign in with your new password.
             </div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {apiError && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-center gap-2">
+              <AlertCircle size={15} /> {apiError}
+            </div>
+          )}
+
+          <div className="space-y-4">
             <div>
               <label className="text-sm text-slate-300 mb-1.5 block">Email address</label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input {...register('email')} type="text" inputMode="email" placeholder="you@startup.com"
-                  className="w-full bg-navy-800 border border-navy-700 rounded-lg pl-10 pr-4 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-gold-500 transition-colors" />
+                <input value={email} onChange={e => { setEmail(e.target.value); setErrors(p => ({ ...p, email: '' })) }}
+                  placeholder="you@startup.com"
+                  onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                  className={`${inputClass} ${errors.email ? 'border-red-500' : ''}`} />
               </div>
-              {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email.message}</p>}
+              {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email}</p>}
             </div>
 
             <div>
@@ -116,27 +143,31 @@ export default function Login() {
               </div>
               <div className="relative">
                 <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input {...register('password')} type={showPass ? 'text' : 'password'} placeholder="••••••••"
-                  className="w-full bg-navy-800 border border-navy-700 rounded-lg pl-10 pr-10 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-gold-500 transition-colors" />
+                <input value={password} onChange={e => { setPassword(e.target.value); setErrors(p => ({ ...p, password: '' })) }}
+                  type="text"
+                  style={{ WebkitTextSecurity: showPass ? 'none' : 'disc' }}
+                  placeholder="••••••••"
+                  onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                  className={`w-full bg-navy-800 border border-navy-700 rounded-lg pl-10 pr-10 py-3 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-gold-500 transition-colors ${errors.password ? 'border-red-500' : ''}`} />
                 <button type="button" onClick={() => setShowPass(!showPass)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
                   {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
-              {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password.message}</p>}
+              {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password}</p>}
             </div>
 
-            <GoldButton type="submit" loading={isSubmitting} className="w-full" size="lg">
+            <GoldButton type="button" loading={loading} className="w-full" size="lg" onClick={handleSubmit}>
               Sign In
             </GoldButton>
-          </form>
+          </div>
 
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-navy-700" /></div>
             <div className="relative flex justify-center"><span className="bg-navy-950 px-3 text-slate-500 text-xs">or continue with</span></div>
           </div>
 
-          <button className="w-full flex items-center justify-center gap-3 py-3 bg-navy-800 border border-navy-700 rounded-lg text-white text-sm hover:bg-navy-700 transition-colors">
+          <button type="button" className="w-full flex items-center justify-center gap-3 py-3 bg-navy-800 border border-navy-700 rounded-lg text-white text-sm hover:bg-navy-700 transition-colors">
             <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
             Continue with Google
           </button>

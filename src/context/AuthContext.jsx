@@ -3,24 +3,56 @@ import { login as apiLogin, signup as apiSignup, logout as apiLogout } from '../
 
 const AuthContext = createContext(null)
 
+// Decode JWT and check expiry without any library
+const isTokenValid = (token) => {
+  if (!token) return false
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    // exp is in seconds, Date.now() is in ms — add 10s buffer
+    return payload.exp * 1000 > Date.now() + 10000
+  } catch {
+    return false
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [token, setToken] = useState(() => localStorage.getItem('access_token'))
+  const [token, setToken] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem('user')
-    if (stored && token) {
-      try { setUser(JSON.parse(stored)) } catch { /* ignore */ }
+    const storedToken = localStorage.getItem('access_token')
+    const storedUser = localStorage.getItem('user')
+
+    if (storedToken && isTokenValid(storedToken)) {
+      // Token exists and is not expired — restore session
+      setToken(storedToken)
+      if (storedUser) {
+        try { setUser(JSON.parse(storedUser)) } catch { /* ignore */ }
+      }
+    } else {
+      // Token missing or expired — clear everything
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('user')
     }
+    // Always set loading false after check — no flash possible
     setLoading(false)
-  }, [token])
+  }, [])
 
   const login = useCallback(async (credentials) => {
     const { data } = await apiLogin(credentials)
+    // Backend returns { status, access, refresh, user: { id, first_name, last_name, email, user_type, bussiness_name } }
+    if (!data.access || !data.user) {
+      throw new Error('Invalid login response from server')
+    }
     localStorage.setItem('access_token', data.access)
     localStorage.setItem('refresh_token', data.refresh)
-    const user = { ...data.user, full_name: `${data.user?.first_name || ''} ${data.user?.last_name || ''}`.trim() }
+    const user = {
+      ...data.user,
+      full_name: `${data.user.first_name || ''} ${data.user.last_name || ''}`.trim(),
+      role: data.user.user_type,
+    }
     localStorage.setItem('user', JSON.stringify(user))
     setToken(data.access)
     setUser(user)

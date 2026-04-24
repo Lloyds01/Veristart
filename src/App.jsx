@@ -35,11 +35,30 @@ const PageWrapper = ({ children }) => (
   </motion.div>
 )
 
+const FullScreenLoader = () => (
+  <div className="min-h-screen bg-navy-950 flex flex-col items-center justify-center gap-4">
+    <div className="relative">
+      <div className="w-12 h-12 border-2 border-navy-700 rounded-full" />
+      <div className="w-12 h-12 border-2 border-gold-500 border-t-transparent rounded-full animate-spin absolute inset-0" />
+    </div>
+    <p className="text-slate-500 text-sm">Loading...</p>
+  </div>
+)
+
 function ProtectedRoute({ children, role }) {
   const { isAuthenticated, user, loading } = useAuth()
-  if (loading) return <div className="min-h-screen bg-navy-950 flex items-center justify-center"><div className="w-8 h-8 border-2 border-gold-500 border-t-transparent rounded-full animate-spin" /></div>
+
+  // Always wait for auth check to complete before rendering anything
+  if (loading) return <FullScreenLoader />
+
+  // Not authenticated — redirect to login
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (role && user?.role !== role) return <Navigate to={user?.role === 'INVESTOR' ? '/investor/dashboard' : '/dashboard'} replace />
+
+  // Wrong role — redirect to correct dashboard
+  if (role && user?.role !== role) {
+    return <Navigate to={user?.role === 'INVESTOR' ? '/investor/dashboard' : '/dashboard'} replace />
+  }
+
   return children
 }
 

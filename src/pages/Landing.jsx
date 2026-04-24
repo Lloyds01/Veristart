@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { motion, useInView } from 'framer-motion'
 import {
   Play, ChevronDown, Rocket, Users, BarChart3, Zap,
-  Shield, TrendingUp, Globe, Star, Check, ArrowRight
+  Shield, TrendingUp, Globe, Star, Check, ArrowRight, FileText, DollarSign, Activity
 } from 'lucide-react'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from 'recharts'
 import CountUp from 'react-countup'
 import GoldButton from '../components/common/GoldButton'
 import StartupCard from '../components/common/StartupCard'
@@ -40,18 +41,21 @@ const FEATURES = [
     title: 'AI-Powered Pitch Generation',
     desc: 'Our AI reads your profile, financials, and team data to craft a compelling, investor-ready pitch deck in under 60 seconds.',
     bullets: ['Full pitch deck, elevator pitch, or executive summary', 'Tailored to your industry and stage', 'Edit any section with one click'],
+    mockupKey: 'pitch',
   },
   {
     icon: Shield,
     title: 'Verified Financial Intelligence',
     desc: 'Upload your financial data and get an instant health score, trend analysis, and actionable insights that investors trust.',
     bullets: ['Revenue trend analysis', 'Burn rate and runway calculation', 'Benchmarked against industry peers'],
+    mockupKey: 'financial',
   },
   {
     icon: Globe,
     title: 'Funding Marketplace Access',
     desc: 'Browse 200+ vetted funding providers — loans, grants, and equity investors — all filtered for African startups.',
     bullets: ['Loans, grants, and equity options', 'One-click application with auto-attached profile', 'Real-time application status tracking'],
+    mockupKey: 'funding',
   },
 ]
 
@@ -60,6 +64,156 @@ const TESTIMONIALS = [
   { quote: 'As an investor, I use Veristart daily to discover verified startups. The financial data quality is unmatched.', name: 'Emeka Eze', company: 'Lagos Ventures', rating: 5 },
   { quote: 'We went from zero to pitch-ready in 2 days. The platform understood our business better than we expected.', name: 'Fatima Al-Hassan', company: 'AgriConnect', rating: 5 },
 ]
+
+const REVENUE_DATA = [
+  { month: 'Jul', revenue: 1.2 }, { month: 'Aug', revenue: 1.8 },
+  { month: 'Sep', revenue: 2.4 }, { month: 'Oct', revenue: 3.1 },
+  { month: 'Nov', revenue: 3.8 }, { month: 'Dec', revenue: 4.5 },
+]
+
+const RUNWAY_DATA = [
+  { month: 'Jan', burn: 1.8 }, { month: 'Feb', burn: 1.6 },
+  { month: 'Mar', burn: 2.1 }, { month: 'Apr', burn: 1.9 },
+  { month: 'May', burn: 1.7 }, { month: 'Jun', burn: 2.0 },
+]
+
+function PitchMockup() {
+  const sections = ['Problem', 'Solution', 'Market', 'Traction', 'Team', 'Ask']
+  const [active, setActive] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setActive(p => (p + 1) % sections.length), 1800)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <div className="bg-navy-900 rounded-xl p-5 border border-navy-700">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+        <div className="w-2.5 h-2.5 rounded-full bg-gold-500" />
+        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+        <span className="text-slate-500 text-xs ml-1 font-mono">pitch_deck.ai</span>
+      </div>
+      <div className="flex gap-1.5 mb-4 flex-wrap">
+        {sections.map((s, i) => (
+          <span key={s} className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all duration-300 ${
+            i === active ? 'bg-gold-500 text-navy-950' : 'bg-navy-800 text-slate-500'
+          }`}>{s}</span>
+        ))}
+      </div>
+      <motion.div key={active} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+        className="space-y-2">
+        <div className="h-3 bg-navy-700 rounded-full w-3/4" />
+        <div className="h-3 bg-navy-700 rounded-full w-full" />
+        <div className="h-3 bg-navy-700 rounded-full w-5/6" />
+        <div className="h-3 bg-navy-700 rounded-full w-2/3" />
+      </motion.div>
+      <div className="mt-4 flex items-center gap-2 p-3 bg-gold-500/10 border border-gold-500/20 rounded-lg">
+        <Zap size={14} className="text-gold-500" />
+        <span className="text-gold-400 text-xs font-medium">AI generating {sections[active]} section...</span>
+      </div>
+      <div className="mt-3 flex gap-2">
+        {['Download PDF', 'Share Link'].map(label => (
+          <div key={label} className="flex-1 py-2 bg-navy-800 rounded-lg text-center text-xs text-slate-400 border border-navy-700">{label}</div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function FinancialMockup() {
+  return (
+    <div className="bg-navy-900 rounded-xl p-5 border border-navy-700">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-white text-sm font-semibold">Financial Health</span>
+        <span className="text-xs px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full font-medium">Verified ✓</span>
+      </div>
+      <div className="flex items-center gap-4 mb-4">
+        <div className="relative w-16 h-16 flex-shrink-0">
+          <svg className="-rotate-90" width="64" height="64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#1E2F4D" strokeWidth="6" />
+            <motion.circle cx="32" cy="32" r="26" fill="none" stroke="#C9A84C" strokeWidth="6"
+              strokeDasharray={163} initial={{ strokeDashoffset: 163 }} animate={{ strokeDashoffset: 163 * 0.13 }}
+              transition={{ duration: 2, ease: 'easeOut', delay: 0.5 }} strokeLinecap="round" />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="font-mono text-xs font-bold text-gold-400">87</span>
+          </div>
+        </div>
+        <div className="flex-1">
+          {[['Revenue', '₦4.5M/mo', '+28%', 'text-emerald-400'], ['Burn Rate', '₦2.1M/mo', '-5%', 'text-emerald-400'], ['Runway', '14 months', '+2mo', 'text-emerald-400']].map(([l, v, t, c]) => (
+            <div key={l} className="flex items-center justify-between py-1">
+              <span className="text-slate-500 text-xs">{l}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-white">{v}</span>
+                <span className={`text-xs ${c}`}>{t}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={80}>
+        <LineChart data={REVENUE_DATA}>
+          <Line type="monotone" dataKey="revenue" stroke="#C9A84C" strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {[['Trend', '↑ Strong'], ['Peers', 'Top 20%'], ['Score', '87/100']].map(([l, v]) => (
+          <div key={l} className="bg-navy-800 rounded-lg p-2 text-center">
+            <p className="text-slate-500 text-xs">{l}</p>
+            <p className="text-gold-400 text-xs font-medium mt-0.5">{v}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function FundingMockup() {
+  const providers = [
+    { name: 'Lagos Angel Network', type: 'INVESTMENT', amount: '₦5M–₦50M', color: 'text-purple-400 bg-purple-900/40' },
+    { name: 'BOI SME Loan', type: 'LOAN', amount: '₦1M–₦100M', color: 'text-blue-400 bg-blue-900/40' },
+    { name: 'TEF Grant', type: 'GRANT', amount: '₦2.5M', color: 'text-emerald-400 bg-emerald-900/40' },
+  ]
+  const [applied, setApplied] = useState(null)
+  return (
+    <div className="bg-navy-900 rounded-xl p-5 border border-navy-700">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-white text-sm font-semibold">Funding Marketplace</span>
+        <span className="font-mono text-gold-400 text-xs">200+ providers</span>
+      </div>
+      <div className="space-y-2.5">
+        {providers.map((p) => (
+          <motion.div key={p.name} layout
+            className="flex items-center justify-between p-3 bg-navy-800 rounded-lg border border-navy-700 hover:border-gold-500/30 transition-all">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-navy-700 flex items-center justify-center">
+                <DollarSign size={14} className="text-gold-500" />
+              </div>
+              <div>
+                <p className="text-white text-xs font-medium">{p.name}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${p.color}`}>{p.type}</span>
+                  <span className="font-mono text-xs text-slate-400">{p.amount}</span>
+                </div>
+              </div>
+            </div>
+            {applied === p.name ? (
+              <span className="text-xs text-emerald-400 flex items-center gap-1"><Check size={11} /> Applied</span>
+            ) : (
+              <button onClick={() => setApplied(p.name)}
+                className="text-xs px-2.5 py-1 bg-gold-500/10 text-gold-400 border border-gold-500/30 rounded-lg hover:bg-gold-500/20 transition-all">
+                Apply
+              </button>
+            )}
+          </motion.div>
+        ))}
+      </div>
+      <div className="mt-3 p-2.5 bg-navy-800 rounded-lg flex items-center gap-2">
+        <Activity size={13} className="text-gold-500" />
+        <span className="text-slate-400 text-xs">3 applications tracked in real-time</span>
+      </div>
+    </div>
+  )
+}
 
 function FadeUp({ children, delay = 0 }) {
   const ref = useRef(null)
@@ -243,7 +397,7 @@ export default function Landing() {
           </FadeUp>
 
           <div className="space-y-24">
-            {FEATURES.map(({ icon: Icon, title, desc, bullets }, i) => (
+            {FEATURES.map(({ icon: Icon, title, desc, bullets, mockupKey }, i) => (
               <FadeUp key={i}>
                 <div className={`grid lg:grid-cols-2 gap-12 items-center ${i % 2 === 1 ? 'lg:grid-flow-dense' : ''}`}>
                   <div className={i % 2 === 1 ? 'lg:col-start-2' : ''}>
@@ -264,10 +418,10 @@ export default function Landing() {
                       Learn more <ArrowRight size={14} />
                     </a>
                   </div>
-                  <div className={`bg-navy-800 rounded-2xl p-8 border border-navy-700 ${i % 2 === 1 ? 'lg:col-start-1 lg:row-start-1' : ''}`}>
-                    <div className="aspect-video bg-navy-900 rounded-xl flex items-center justify-center">
-                      <Icon size={48} className="text-gold-500/30" />
-                    </div>
+                  <div className={`bg-navy-800 rounded-2xl p-6 border border-navy-700 shadow-navy-lg ${i % 2 === 1 ? 'lg:col-start-1 lg:row-start-1' : ''}`}>
+                    {mockupKey === 'pitch' && <PitchMockup />}
+                    {mockupKey === 'financial' && <FinancialMockup />}
+                    {mockupKey === 'funding' && <FundingMockup />}
                   </div>
                 </div>
               </FadeUp>
