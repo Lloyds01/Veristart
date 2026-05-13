@@ -10,3 +10,4 @@ export const changePassword = (data) => client.post('/auth/change-password/', da
 export const refreshToken = (data) => client.post('/auth/token/refresh/', data)
 export const logout = () => client.post('/auth/logout/')
 export const joinWaitlist = (data) => client.post('/auth/waitlist/', data)
+export const getIndustries = () => client.get('/auth/industries/')

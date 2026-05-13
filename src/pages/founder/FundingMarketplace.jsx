@@ -1,17 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Heart, X, Check, ChevronDown, Sparkles, Filter } from 'lucide-react'
+import { Search, Heart, X, Check, Sparkles, Filter, Loader2, AlertCircle } from 'lucide-react'
 import GoldButton from '../../components/common/GoldButton'
 import { formatCurrency } from '../../utils/formatCurrency'
-
-const PROVIDERS = [
-  { id: 1, name: 'Tony Elumelu Foundation', type: 'GRANT', desc: 'Empowering African entrepreneurs with $5,000 seed capital and mentorship.', min: 2500000, max: 25000000, requirements: ['African founder', 'Early stage', 'Social impact'], logo: 'TEF', saved: false },
-  { id: 2, name: 'Lagos Angel Network', type: 'INVESTMENT', desc: 'Nigeria\'s premier angel investor network backing early-stage tech startups.', min: 5000000, max: 50000000, requirements: ['Tech startup', 'MVP ready', 'Lagos-based'], logo: 'LAN', saved: true },
-  { id: 3, name: 'Ventures Platform', type: 'INVESTMENT', desc: 'Pan-African VC fund investing in seed and pre-Series A startups.', min: 25000000, max: 250000000, requirements: ['Scalable model', 'Strong team', 'Pan-African'], logo: 'VP', saved: false },
-  { id: 4, name: 'BOI SME Loan', type: 'LOAN', desc: 'Bank of Industry low-interest loans for Nigerian SMEs and startups.', min: 1000000, max: 100000000, rate: '9% p.a.', requirements: ['Registered business', 'Collateral', '2yr history'], logo: 'BOI', saved: false },
-  { id: 5, name: 'Microtraction', type: 'INVESTMENT', desc: 'Pre-seed fund for African founders building for the next billion users.', min: 3000000, max: 15000000, requirements: ['Pre-seed stage', 'African market', 'Tech-enabled'], logo: 'MT', saved: false },
-  { id: 6, name: 'NIRSAL MFB', type: 'LOAN', desc: 'Agricultural and SME financing with government-backed guarantees.', min: 500000, max: 50000000, rate: '5% p.a.', requirements: ['Agri/SME focus', 'BVN verified', 'Business plan'], logo: 'NMF', saved: false },
-]
+import { formatDate } from '../../utils/formatDate'
+import { listProviders, applyForFunding, getApplications } from '../../api/funding'
+import { useToast } from '../../context/ToastContext'
 
 const TYPE_COLORS = {
   LOAN: 'bg-blue-900/50 text-blue-300 border-blue-700/50',
@@ -19,18 +13,25 @@ const TYPE_COLORS = {
   GRANT: 'bg-emerald-900/50 text-emerald-400 border-emerald-700/50',
 }
 
+const STATUS_STYLES = {
+  APPROVED: 'bg-emerald-900/50 text-emerald-400',
+  REVIEWING: 'bg-blue-900/50 text-blue-300',
+  PENDING: 'bg-slate-700/50 text-slate-300',
+  REJECTED: 'bg-red-900/50 text-red-400',
+}
+
 function ProviderCard({ provider, onApply, onToggleSave }) {
-  const { name, type, desc, min, max, rate, requirements, logo, saved } = provider
+  const { name, type, description, min_amount, max_amount, interest_rate, requirements, logo, saved } = provider
   return (
     <div className="bg-navy-800 rounded-xl border border-navy-700 p-5 card-hover flex flex-col">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center text-gold-500 font-bold text-xs">
-            {logo}
+            {logo || name?.slice(0, 3).toUpperCase()}
           </div>
           <div>
             <h3 className="font-semibold text-white text-sm">{name}</h3>
-            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${TYPE_COLORS[type]}`}>{type}</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${TYPE_COLORS[type] || TYPE_COLORS.INVESTMENT}`}>{type}</span>
           </div>
         </div>
         <button onClick={() => onToggleSave(provider.id)}
@@ -39,19 +40,21 @@ function ProviderCard({ provider, onApply, onToggleSave }) {
         </button>
       </div>
 
-      <p className="text-slate-400 text-xs leading-relaxed mb-3 flex-1">{desc}</p>
+      <p className="text-slate-400 text-xs leading-relaxed mb-3 flex-1">{description}</p>
 
       <div className="mb-3">
         <p className="text-slate-500 text-xs mb-1">Funding Range</p>
-        <p className="font-mono text-gold-400 font-semibold text-sm">{formatCurrency(min)} — {formatCurrency(max)}</p>
-        {rate && <p className="text-slate-500 text-xs mt-0.5">Interest: {rate}</p>}
+        <p className="font-mono text-gold-400 font-semibold text-sm">{formatCurrency(min_amount)} — {formatCurrency(max_amount)}</p>
+        {interest_rate && <p className="text-slate-500 text-xs mt-0.5">Interest: {interest_rate}</p>}
       </div>
 
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {requirements.map(r => (
-          <span key={r} className="text-xs px-2 py-0.5 bg-navy-700 text-slate-400 rounded-full">{r}</span>
-        ))}
-      </div>
+      {requirements?.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {requirements.map((r) => (
+            <span key={r} className="text-xs px-2 py-0.5 bg-navy-700 text-slate-400 rounded-full">{r}</span>
+          ))}
+        </div>
+      )}
 
       <GoldButton size="sm" className="w-full" onClick={() => onApply(provider)}>
         Apply Now →
@@ -60,17 +63,37 @@ function ProviderCard({ provider, onApply, onToggleSave }) {
   )
 }
 
-function ApplicationModal({ provider, onClose }) {
+function ApplicationModal({ provider, onClose, onSuccess }) {
+  const { toast } = useToast()
   const [amount, setAmount] = useState('')
   const [notes, setNotes] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleSubmit = async () => {
+    const parsed = parseFloat(amount)
+    if (!parsed || parsed < (provider.min_amount ?? 0)) {
+      setError(`Minimum amount is ${formatCurrency(provider.min_amount ?? 0)}`)
+      return
+    }
+    if (provider.max_amount && parsed > provider.max_amount) {
+      setError(`Maximum amount is ${formatCurrency(provider.max_amount)}`)
+      return
+    }
+    setError('')
     setLoading(true)
-    await new Promise(r => setTimeout(r, 1500))
-    setLoading(false)
-    setSubmitted(true)
+    try {
+      await applyForFunding(provider.id, { amount_requested: parsed, notes })
+      setSubmitted(true)
+      toast({ type: 'success', message: `Application submitted to ${provider.name}.` })
+      onSuccess?.()
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.response?.data?.message || 'Failed to submit application.'
+      setError(msg)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -90,11 +113,16 @@ function ApplicationModal({ provider, onClose }) {
             </div>
 
             <div className="p-5 space-y-4">
-              {/* Provider Summary */}
+              {error && (
+                <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                  <AlertCircle size={14} /> {error}
+                </div>
+              )}
+
               <div className="flex items-center justify-between p-3 bg-navy-900 rounded-lg">
                 <span className="text-slate-400 text-sm">Available Range</span>
                 <span className="font-mono text-gold-400 font-semibold text-sm">
-                  {formatCurrency(provider.min)} — {formatCurrency(provider.max)}
+                  {formatCurrency(provider.min_amount)} — {formatCurrency(provider.max_amount)}
                 </span>
               </div>
 
@@ -102,22 +130,23 @@ function ApplicationModal({ provider, onClose }) {
                 <label className="text-sm text-slate-300 mb-1.5 block">Amount Requested (₦) *</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono">₦</span>
-                  <input value={amount} onChange={e => setAmount(e.target.value)} type="number"
-                    min={provider.min} max={provider.max} placeholder={`${provider.min.toLocaleString()}`}
+                  <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number"
+                    min={provider.min_amount} max={provider.max_amount}
+                    placeholder={String(provider.min_amount ?? 0)}
                     className="w-full bg-navy-900 border border-navy-700 rounded-lg pl-8 pr-4 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-gold-500 transition-colors" />
                 </div>
               </div>
 
               <div>
                 <label className="text-sm text-slate-300 mb-1.5 block">Why are you a good fit?</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
                   placeholder="Describe why your startup is a strong candidate for this funding..."
                   className="w-full bg-navy-900 border border-navy-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-gold-500 transition-colors resize-none" />
               </div>
 
               <div className="p-3 bg-navy-900 rounded-lg">
                 <p className="text-slate-400 text-xs font-medium mb-2">Auto-attached documents:</p>
-                {['Startup Profile', 'Latest Pitch Deck', 'Financial Summary'].map(doc => (
+                {['Startup Profile', 'Latest Pitch Deck', 'Financial Summary'].map((doc) => (
                   <div key={doc} className="flex items-center gap-2 text-xs text-slate-300 py-1">
                     <Check size={12} className="text-emerald-400" /> {doc}
                   </div>
@@ -137,7 +166,7 @@ function ApplicationModal({ provider, onClose }) {
             <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
               <Sparkles size={28} className="text-emerald-400" />
             </div>
-            <h2 className="text-xl font-bold text-white mb-2">Application Submitted! 🎉</h2>
+            <h2 className="text-xl font-bold text-white mb-2">Application Submitted!</h2>
             <p className="text-slate-400 text-sm mb-6">
               Your application to <span className="text-gold-400">{provider.name}</span> has been submitted. You'll receive updates via email.
             </p>
@@ -150,30 +179,65 @@ function ApplicationModal({ provider, onClose }) {
 }
 
 export default function FundingMarketplace() {
-  const [providers, setProviders] = useState(PROVIDERS)
+  const { toast } = useToast()
+  const [providers, setProviders] = useState([])
+  const [applications, setApplications] = useState([])
+  const [providersLoading, setProvidersLoading] = useState(true)
+  const [appsLoading, setAppsLoading] = useState(true)
   const [filter, setFilter] = useState('ALL')
   const [search, setSearch] = useState('')
   const [applying, setApplying] = useState(null)
   const [tab, setTab] = useState('browse')
 
-  const filtered = providers.filter(p => {
+  const fetchProviders = useCallback(async () => {
+    setProvidersLoading(true)
+    try {
+      const { data } = await listProviders()
+      const list = Array.isArray(data) ? data : (data?.results ?? [])
+      setProviders(list.map((p) => ({ ...p, saved: false })))
+    } catch {
+      toast({ type: 'error', message: 'Could not load funding providers.' })
+    } finally {
+      setProvidersLoading(false)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchApplications = useCallback(async () => {
+    setAppsLoading(true)
+    try {
+      const { data } = await getApplications()
+      const list = Array.isArray(data) ? data : (data?.results ?? [])
+      setApplications(list)
+    } catch {
+      toast({ type: 'error', message: 'Could not load applications.' })
+    } finally {
+      setAppsLoading(false)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { fetchProviders(); fetchApplications() }, [fetchProviders, fetchApplications])
+
+  const toggleSave = (id) => setProviders((prev) => prev.map((p) => p.id === id ? { ...p, saved: !p.saved } : p))
+
+  const filtered = providers.filter((p) => {
     const matchType = filter === 'ALL' || p.type === filter
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
+    const matchSearch = (p.name ?? '').toLowerCase().includes(search.toLowerCase())
     return matchType && matchSearch
   })
-
-  const toggleSave = (id) => setProviders(prev => prev.map(p => p.id === id ? { ...p, saved: !p.saved } : p))
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Funding Marketplace</h1>
-        <p className="text-slate-400 text-sm mt-1">Browse 200+ vetted funding providers across Africa</p>
+        <p className="text-slate-400 text-sm mt-1">Browse vetted funding providers across Africa</p>
       </div>
 
-      {/* Stats Bar */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        {[['200+', 'Funding Providers'], ['₦500B+', 'Available Capital'], [String(providers.filter(p => p.saved).length), 'Saved Providers']].map(([v, l]) => (
+        {[
+          [providersLoading ? '—' : `${providers.length}+`, 'Funding Providers'],
+          ['₦500B+', 'Available Capital'],
+          [String(providers.filter((p) => p.saved).length), 'Saved Providers'],
+        ].map(([v, l]) => (
           <div key={l} className="bg-navy-800 rounded-xl border border-navy-700 p-4 text-center">
             <p className="font-mono text-xl font-bold text-gold-400">{v}</p>
             <p className="text-slate-400 text-xs mt-0.5">{l}</p>
@@ -193,15 +257,14 @@ export default function FundingMarketplace() {
 
       {tab === 'browse' && (
         <>
-          {/* Filters */}
           <div className="flex flex-wrap gap-3 mb-6">
             <div className="relative flex-1 min-w-48">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search providers..."
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search providers..."
                 className="w-full bg-navy-800 border border-navy-700 rounded-lg pl-9 pr-4 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-gold-500 transition-colors" />
             </div>
             <div className="flex gap-2">
-              {['ALL', 'LOAN', 'INVESTMENT', 'GRANT'].map(t => (
+              {['ALL', 'LOAN', 'INVESTMENT', 'GRANT'].map((t) => (
                 <button key={t} onClick={() => setFilter(t)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === t ? 'bg-gold-500/10 text-gold-400 border border-gold-500/30' : 'bg-navy-800 border border-navy-700 text-slate-400 hover:text-white'}`}>
                   {t}
@@ -210,55 +273,75 @@ export default function FundingMarketplace() {
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filtered.map(p => (
-              <ProviderCard key={p.id} provider={p} onApply={setApplying} onToggleSave={toggleSave} />
-            ))}
-          </div>
-
-          {filtered.length === 0 && (
+          {providersLoading ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="bg-navy-800 rounded-xl border border-navy-700 p-5 animate-pulse h-56" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="text-center py-16 bg-navy-800 rounded-xl border border-navy-700">
               <Filter size={40} className="text-slate-600 mx-auto mb-3" />
               <p className="text-white font-medium mb-1">No providers found</p>
               <p className="text-slate-400 text-sm">Try adjusting your filters</p>
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filtered.map((p) => (
+                <ProviderCard key={p.id} provider={p} onApply={setApplying} onToggleSave={toggleSave} />
+              ))}
             </div>
           )}
         </>
       )}
 
       {tab === 'applications' && (
-        <div className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-navy-700">
-                {['Provider', 'Amount', 'Status', 'Date Applied'].map(h => (
-                  <th key={h} className="text-left text-xs text-slate-500 font-medium px-5 py-3">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                { provider: 'Lagos Angel Network', amount: 5000000, status: 'REVIEWING', date: 'Nov 10, 2024' },
-                { provider: 'Tony Elumelu Foundation', amount: 10000000, status: 'APPROVED', date: 'Nov 5, 2024' },
-              ].map(({ provider, amount, status, date }, i) => (
-                <tr key={i} className="border-b border-navy-700/50 hover:bg-navy-700/30 transition-colors">
-                  <td className="px-5 py-3.5 text-white text-sm font-medium">{provider}</td>
-                  <td className="px-5 py-3.5 font-mono text-sm text-gold-400">{formatCurrency(amount)}</td>
-                  <td className="px-5 py-3.5">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${status === 'APPROVED' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-blue-900/50 text-blue-300'}`}>
-                      {status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5 text-slate-400 text-xs">{date}</td>
+        appsLoading ? (
+          <div className="flex items-center justify-center h-40">
+            <Loader2 size={28} className="animate-spin text-gold-500" />
+          </div>
+        ) : applications.length === 0 ? (
+          <div className="text-center py-16 bg-navy-800 rounded-xl border border-navy-700">
+            <p className="text-white font-medium mb-1">No applications yet</p>
+            <p className="text-slate-400 text-sm">Apply to a funding provider to see your applications here</p>
+          </div>
+        ) : (
+          <div className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-navy-700">
+                  {['Provider', 'Amount', 'Status', 'Date Applied'].map((h) => (
+                    <th key={h} className="text-left text-xs text-slate-500 font-medium px-5 py-3">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {applications.map((a) => (
+                  <tr key={a.id} className="border-b border-navy-700/50 hover:bg-navy-700/30 transition-colors">
+                    <td className="px-5 py-3.5 text-white text-sm font-medium">{a.provider_name ?? a.provider ?? '—'}</td>
+                    <td className="px-5 py-3.5 font-mono text-sm text-gold-400">{formatCurrency(a.amount_requested ?? a.amount ?? 0)}</td>
+                    <td className="px-5 py-3.5">
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_STYLES[a.status] ?? STATUS_STYLES.PENDING}`}>
+                        {a.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-400 text-xs">{a.applied_at ? formatDate(a.applied_at) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
       <AnimatePresence>
-        {applying && <ApplicationModal provider={applying} onClose={() => setApplying(null)} />}
+        {applying && (
+          <ApplicationModal
+            provider={applying}
+            onClose={() => setApplying(null)}
+            onSuccess={fetchApplications}
+          />
+        )}
       </AnimatePresence>
     </div>
   )

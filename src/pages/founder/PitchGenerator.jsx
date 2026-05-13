@@ -1,18 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, X, FileText, Mic, AlignLeft, Download, RefreshCw, Share2, Copy, Edit2, Sparkles, Clock } from 'lucide-react'
+import { Check, X, FileText, Mic, AlignLeft, Download, RefreshCw, Share2, Copy, Edit2, Sparkles, Clock, Loader2 } from 'lucide-react'
 import GoldButton from '../../components/common/GoldButton'
+import { useStartup } from '../../context/StartupContext'
+import { generatePitch, listPitches, downloadPitch } from '../../api/pitch'
+import { listMembers } from '../../api/team'
+import { getSummary } from '../../api/financial'
+import { useToast } from '../../context/ToastContext'
 
 const PITCH_TYPES = [
   { id: 'full', icon: FileText, label: 'Full Pitch Deck', desc: 'Complete investor presentation', popular: true, time: '~45 seconds' },
   { id: 'elevator', icon: Mic, label: 'Elevator Pitch', desc: '60-second spoken script', popular: false, time: '~20 seconds' },
   { id: 'executive', icon: AlignLeft, label: 'Executive Summary', desc: '1-page PDF overview', popular: false, time: '~30 seconds' },
-]
-
-const REQUIREMENTS = [
-  { label: 'Business Profile Complete', met: true },
-  { label: 'Team Members Added', met: true },
-  { label: 'Financial Data Uploaded', met: false },
 ]
 
 const GENERATION_STAGES = [
@@ -30,58 +29,179 @@ const QUOTES = [
   '"Investors don\'t fund ideas. They fund people with conviction."',
 ]
 
-const PITCH_SECTIONS = {
-  Problem: 'African SMEs lose ₦2.3 trillion annually due to lack of access to verified financial data and investor-ready documentation. 78% of fundable startups fail to raise capital not because of poor business models, but because they cannot communicate their value effectively.',
-  Solution: 'Veristart provides a comprehensive platform that helps African startups build verified financial profiles, generate AI-powered pitch documents, and connect directly with funding providers — reducing the time from "ready to pitch" to "funded" from months to days.',
-  Market: 'The African startup ecosystem represents a $150B+ opportunity. With 54 countries, 1.4B people, and a rapidly growing middle class, the demand for startup financing solutions is accelerating at 34% CAGR.',
-  'Business Model': 'SaaS subscription model with three tiers: Free (₦0/mo), Growth (₦15,000/mo), and Scale (₦35,000/mo). Additional revenue from transaction fees on successful funding matches (2.5% of funded amount).',
-  Traction: '1,200+ verified startups on platform. ₦2.4B+ in funding connected. 94% pitch success rate. Growing at 28% month-over-month. Partnerships with 15 major African funding institutions.',
-  Financials: 'Monthly Revenue: ₦4.5M (+28% MoM). Monthly Expenses: ₦2.1M. Net Profit: ₦2.4M. Runway: 14 months. Seeking ₦50M Series A to expand to 5 new African markets.',
-  Team: 'Segun Oloyede (CEO) — 8 years fintech experience, ex-Flutterwave. Amaka Obi (CTO) — Built products for 500K+ users. Combined team of 12 across engineering, product, and growth.',
-  Ask: 'Raising ₦50M Series A at ₦500M valuation. Funds will be deployed: 40% product development, 35% market expansion, 25% team growth. Target close: Q1 2025.',
-}
-
-const PREVIOUS_PITCHES = [
-  { id: 1, type: 'Full Pitch Deck', date: 'Nov 10, 2024', views: 12 },
-  { id: 2, type: 'Executive Summary', date: 'Oct 28, 2024', views: 5 },
-]
+const SECTION_ORDER = ['Problem', 'Solution', 'Market', 'Business Model', 'Traction', 'Financials', 'Team', 'Ask']
 
 export default function PitchGenerator() {
+  const { toast } = useToast()
+  const { startup, startupId } = useStartup()
+
   const [state, setState] = useState('pre') // pre | generating | generated
   const [selectedType, setSelectedType] = useState('full')
   const [genStage, setGenStage] = useState(0)
   const [progress, setProgress] = useState(0)
-  const [activeSection, setActiveSection] = useState('Problem')
+  const [activeSection, setActiveSection] = useState(SECTION_ORDER[0])
   const [quoteIdx, setQuoteIdx] = useState(0)
   const [copied, setCopied] = useState(false)
 
-  const canGenerate = REQUIREMENTS.every(r => r.met)
+  const [previousPitches, setPreviousPitches] = useState([])
+  const [pitchesLoading, setPitchesLoading] = useState(true)
+  const [requirements, setRequirements] = useState([
+    { label: 'Business Profile Complete', met: false },
+    { label: 'Team Members Added', met: false },
+    { label: 'Financial Data Uploaded', met: false },
+  ])
+  const [currentPitch, setCurrentPitch] = useState(null) // { id, sections: { Problem: '...', ... } }
+  const [currentPitchId, setCurrentPitchId] = useState(null)
+
+  // Refs used to coordinate animation with API response
+  const apiDoneRef = useRef(false)
+  const animDoneRef = useRef(false)
+  const pitchDataRef = useRef(null)
+
+  // Check requirements from real data
+  const checkRequirements = useCallback(async () => {
+    if (!startupId) return
+    const [membersRes, financialsRes] = await Promise.allSettled([
+      listMembers(),
+      getSummary(startupId),
+    ])
+    const hasProfile = !!(startup?.business_name && startup?.description)
+    const hasTeam = membersRes.status === 'fulfilled' &&
+      (Array.isArray(membersRes.value.data) ? membersRes.value.data.length > 0 : false)
+    const hasFinancials = financialsRes.status === 'fulfilled'
+    setRequirements([
+      { label: 'Business Profile Complete', met: hasProfile },
+      { label: 'Team Members Added', met: hasTeam },
+      { label: 'Financial Data Uploaded', met: hasFinancials },
+    ])
+  }, [startup, startupId])
+
+  const fetchPreviousPitches = useCallback(async () => {
+    if (!startupId) return
+    setPitchesLoading(true)
+    try {
+      const { data } = await listPitches(startupId)
+      const list = Array.isArray(data) ? data : (data?.results ?? [])
+      setPreviousPitches(list)
+    } catch {
+      // Silently ignore — not critical
+    } finally {
+      setPitchesLoading(false)
+    }
+  }, [startupId])
 
   useEffect(() => {
+    checkRequirements()
+    fetchPreviousPitches()
+  }, [checkRequirements, fetchPreviousPitches])
+
+  const canGenerate = requirements.every((r) => r.met)
+
+  // Animation loop while generating — ticks until both API AND animation are done
+  useEffect(() => {
     if (state !== 'generating') return
+    apiDoneRef.current = false
+    animDoneRef.current = false
+
     let stage = 0
     let prog = 0
+
     const interval = setInterval(() => {
-      prog += 2
-      setProgress(prog)
+      // Slow down progress near 95% until API responds
+      const isNearEnd = prog >= 90
+      if (isNearEnd && !apiDoneRef.current) return
+
+      prog = Math.min(prog + (isNearEnd ? 0.5 : 2), 100)
+      setProgress(Math.round(prog))
+
       if (prog % 20 === 0 && stage < GENERATION_STAGES.length - 1) {
         stage++
         setGenStage(stage)
-        setQuoteIdx(q => (q + 1) % QUOTES.length)
+        setQuoteIdx((q) => (q + 1) % QUOTES.length)
       }
+
       if (prog >= 100) {
         clearInterval(interval)
-        setTimeout(() => setState('generated'), 500)
+        animDoneRef.current = true
+        if (apiDoneRef.current) {
+          setCurrentPitch(pitchDataRef.current)
+          setTimeout(() => setState('generated'), 400)
+        }
       }
     }, 80)
+
     return () => clearInterval(interval)
   }, [state])
 
+  const handleGenerate = async () => {
+    if (!startupId) {
+      toast({ type: 'error', message: 'Complete your startup profile first.' })
+      return
+    }
+    setState('generating')
+    setGenStage(0)
+    setProgress(0)
+    apiDoneRef.current = false
+    animDoneRef.current = false
+    pitchDataRef.current = null
+
+    try {
+      const { data } = await generatePitch(startupId, { pitch_type: selectedType })
+      setCurrentPitchId(data.id ?? data.pitch_id)
+
+      // Normalise sections — backend may return { sections: {...} } or flat object
+      const rawSections = data.sections ?? data.content ?? data
+      const sections = {}
+      SECTION_ORDER.forEach((key) => {
+        const val = rawSections[key] ?? rawSections[key.toLowerCase().replace(' ', '_')]
+        if (val) sections[key] = val
+      })
+      if (Object.keys(sections).length === 0 && typeof rawSections === 'object') {
+        Object.assign(sections, rawSections)
+      }
+
+      pitchDataRef.current = { id: data.id, sections }
+      apiDoneRef.current = true
+      setActiveSection(Object.keys(sections)[0] || SECTION_ORDER[0])
+      await fetchPreviousPitches()
+
+      if (animDoneRef.current) {
+        setCurrentPitch(pitchDataRef.current)
+        setState('generated')
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Pitch generation failed. Please try again.'
+      toast({ type: 'error', message: msg })
+      setState('pre')
+    }
+  }
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(PITCH_SECTIONS[activeSection])
+    const text = currentPitch?.sections?.[activeSection] ?? ''
+    navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  const handleDownload = async (pitchId) => {
+    if (!startupId) return
+    const id = pitchId ?? currentPitchId
+    if (!id) { toast({ type: 'error', message: 'No pitch available to download.' }); return }
+    try {
+      const { data } = await downloadPitch(startupId, id)
+      const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `pitch-${id}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast({ type: 'error', message: 'Download failed. The PDF may still be processing.' })
+    }
+  }
+
+  const sections = currentPitch?.sections ?? {}
+  const sectionKeys = Object.keys(sections).length > 0 ? Object.keys(sections) : SECTION_ORDER
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -91,7 +211,7 @@ export default function PitchGenerator() {
       </div>
 
       <AnimatePresence mode="wait">
-        {/* PRE-GENERATION STATE */}
+        {/* PRE-GENERATION */}
         {state === 'pre' && (
           <motion.div key="pre" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="grid lg:grid-cols-2 gap-6 mb-6">
@@ -99,7 +219,7 @@ export default function PitchGenerator() {
               <div className="bg-navy-800 rounded-xl border border-navy-700 p-6">
                 <h2 className="font-semibold text-white mb-4">Requirements Checklist</h2>
                 <div className="space-y-3">
-                  {REQUIREMENTS.map(({ label, met }) => (
+                  {requirements.map(({ label, met }) => (
                     <div key={label} className={`flex items-center gap-3 p-3 rounded-lg ${met ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
                       {met ? <Check size={16} className="text-emerald-400 flex-shrink-0" /> : <X size={16} className="text-red-400 flex-shrink-0" />}
                       <span className={`text-sm ${met ? 'text-emerald-300' : 'text-red-300'}`}>{label}</span>
@@ -107,7 +227,7 @@ export default function PitchGenerator() {
                   ))}
                 </div>
                 {!canGenerate && (
-                  <p className="text-slate-500 text-xs mt-4">Complete all requirements to generate your pitch</p>
+                  <p className="text-slate-500 text-xs mt-4">Complete all requirements to unlock pitch generation</p>
                 )}
               </div>
 
@@ -138,40 +258,49 @@ export default function PitchGenerator() {
             </div>
 
             <div className="text-center">
-              <GoldButton size="xl" icon={<Sparkles size={18} />}
-                disabled={!canGenerate}
-                onClick={() => { setState('generating'); setGenStage(0); setProgress(0) }}>
+              <GoldButton size="xl" icon={<Sparkles size={18} />} disabled={!canGenerate} onClick={handleGenerate}>
                 Generate My Pitch
               </GoldButton>
-              {!canGenerate && <p className="text-slate-500 text-sm mt-3">Complete all requirements above to unlock pitch generation</p>}
+              {!canGenerate && (
+                <p className="text-slate-500 text-sm mt-3">Complete all requirements above to unlock pitch generation</p>
+              )}
             </div>
 
             {/* Previous Pitches */}
-            {PREVIOUS_PITCHES.length > 0 && (
+            {!pitchesLoading && previousPitches.length > 0 && (
               <div className="mt-10">
                 <h2 className="font-semibold text-white mb-4">Previous Pitches</h2>
                 <div className="space-y-3">
-                  {PREVIOUS_PITCHES.map(({ id, type, date, views }) => (
-                    <div key={id} className="flex items-center justify-between p-4 bg-navy-800 rounded-xl border border-navy-700 hover:border-gold-500/20 transition-all">
+                  {previousPitches.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between p-4 bg-navy-800 rounded-xl border border-navy-700 hover:border-gold-500/20 transition-all">
                       <div className="flex items-center gap-3">
                         <FileText size={18} className="text-gold-500" />
                         <div>
-                          <p className="text-white text-sm font-medium">{type}</p>
-                          <p className="text-slate-500 text-xs">{date} · {views} investor views</p>
+                          <p className="text-white text-sm font-medium">{p.pitch_type ?? p.type ?? 'Pitch Deck'}</p>
+                          <p className="text-slate-500 text-xs">
+                            {p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}
+                            {p.view_count != null ? ` · ${p.view_count} investor views` : ''}
+                          </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <GoldButton variant="secondary" size="sm" icon={<Download size={13} />}>Download</GoldButton>
-                      </div>
+                      <GoldButton variant="secondary" size="sm" icon={<Download size={13} />} onClick={() => handleDownload(p.id)}>
+                        Download
+                      </GoldButton>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+
+            {pitchesLoading && (
+              <div className="mt-10 flex items-center justify-center h-16">
+                <Loader2 size={20} className="animate-spin text-gold-500" />
+              </div>
+            )}
           </motion.div>
         )}
 
-        {/* GENERATING STATE */}
+        {/* GENERATING */}
         {state === 'generating' && (
           <motion.div key="generating" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="flex flex-col items-center justify-center py-20">
@@ -205,54 +334,57 @@ export default function PitchGenerator() {
           </motion.div>
         )}
 
-        {/* GENERATED STATE */}
+        {/* GENERATED */}
         {state === 'generated' && (
           <motion.div key="generated" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            {/* Success Banner */}
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
               className="text-center py-8 mb-6">
               <div className="w-16 h-16 rounded-full bg-gold-gradient flex items-center justify-center mx-auto mb-4">
                 <Sparkles size={28} className="text-navy-950" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-1">Your Pitch is Ready! 🎉</h2>
-              <p className="text-slate-400 text-sm">AI-generated pitch deck based on your profile and financials</p>
+              <h2 className="text-2xl font-bold text-white mb-1">Your Pitch is Ready!</h2>
+              <p className="text-slate-400 text-sm">AI-generated pitch based on your profile and financials</p>
             </motion.div>
 
-            {/* Action Buttons */}
             <div className="flex flex-wrap gap-3 justify-center mb-6">
-              <GoldButton icon={<Download size={15} />}>Download PDF</GoldButton>
-              <GoldButton variant="secondary" icon={<RefreshCw size={15} />}>Regenerate Section</GoldButton>
+              <GoldButton icon={<Download size={15} />} onClick={() => handleDownload(currentPitchId)}>
+                Download PDF
+              </GoldButton>
+              <GoldButton variant="secondary" icon={<RefreshCw size={15} />} onClick={() => setState('pre')}>
+                Generate New
+              </GoldButton>
               <GoldButton variant="secondary" icon={<Share2 size={15} />}>Share Link</GoldButton>
               <GoldButton variant="secondary" icon={copied ? <Check size={15} /> : <Copy size={15} />} onClick={handleCopy}>
-                {copied ? 'Copied!' : 'Copy Text'}
+                {copied ? 'Copied!' : 'Copy Section'}
               </GoldButton>
             </div>
 
-            {/* Section Tabs */}
-            <div className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden">
-              <div className="flex overflow-x-auto border-b border-navy-700 scrollbar-hide">
-                {Object.keys(PITCH_SECTIONS).map(section => (
-                  <button key={section} onClick={() => setActiveSection(section)}
-                    className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${activeSection === section ? 'border-gold-500 text-gold-400 bg-gold-500/5' : 'border-transparent text-slate-400 hover:text-white'}`}>
-                    {section}
-                  </button>
-                ))}
-              </div>
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-white">{activeSection}</h3>
-                  <button className="flex items-center gap-1.5 text-slate-400 hover:text-gold-400 text-xs transition-colors">
-                    <Edit2 size={13} /> Edit
-                  </button>
+            {Object.keys(sections).length > 0 && (
+              <div className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden">
+                <div className="flex overflow-x-auto border-b border-navy-700 scrollbar-hide">
+                  {sectionKeys.map((section) => (
+                    <button key={section} onClick={() => setActiveSection(section)}
+                      className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${activeSection === section ? 'border-gold-500 text-gold-400 bg-gold-500/5' : 'border-transparent text-slate-400 hover:text-white'}`}>
+                      {section}
+                    </button>
+                  ))}
                 </div>
-                <AnimatePresence mode="wait">
-                  <motion.p key={activeSection} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-                    className="text-slate-300 text-sm leading-relaxed">
-                    {PITCH_SECTIONS[activeSection]}
-                  </motion.p>
-                </AnimatePresence>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-white">{activeSection}</h3>
+                    <button className="flex items-center gap-1.5 text-slate-400 hover:text-gold-400 text-xs transition-colors">
+                      <Edit2 size={13} /> Edit
+                    </button>
+                  </div>
+                  <AnimatePresence mode="wait">
+                    <motion.p key={activeSection} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+                      className="text-slate-300 text-sm leading-relaxed">
+                      {sections[activeSection] ?? 'No content for this section.'}
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="mt-6 text-center">
               <button onClick={() => setState('pre')} className="text-slate-400 hover:text-gold-400 text-sm transition-colors">

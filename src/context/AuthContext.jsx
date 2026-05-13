@@ -1,60 +1,74 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { login as apiLogin, signup as apiSignup, logout as apiLogout } from '../api/auth'
+import { login as apiLogin, signup as apiSignup, logout as apiLogout, getIndustries } from '../api/auth'
 
 const AuthContext = createContext(null)
 
-// Decode JWT and check expiry without any library
-const isTokenValid = (token) => {
-  if (!token) return false
+const decodeToken = (token) => {
+  if (!token) return null
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    // exp is in seconds, Date.now() is in ms — add 10s buffer
-    return payload.exp * 1000 > Date.now() + 10000
+    return JSON.parse(atob(token.split('.')[1]))
   } catch {
-    return false
+    return null
   }
+}
+
+const isTokenValid = (token) => {
+  const payload = decodeToken(token)
+  if (!payload) return false
+  // exp is seconds, Date.now() is ms — 10s buffer
+  return payload.exp * 1000 > Date.now() + 10000
+}
+
+// Read role from the JWT itself, not from mutable localStorage user object.
+// This prevents a user from changing their role by editing localStorage.
+const getRoleFromToken = (token) => {
+  const payload = decodeToken(token)
+  return payload?.user_type || payload?.role || null
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(null)
+  const [userRole, setUserRole] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [industries, setIndustries] = useState([])
 
   useEffect(() => {
     const storedToken = localStorage.getItem('access_token')
     const storedUser = localStorage.getItem('user')
 
     if (storedToken && isTokenValid(storedToken)) {
-      // Token exists and is not expired — restore session
       setToken(storedToken)
+      setUserRole(getRoleFromToken(storedToken))
       if (storedUser) {
         try { setUser(JSON.parse(storedUser)) } catch { /* ignore */ }
       }
     } else {
-      // Token missing or expired — clear everything
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       localStorage.removeItem('user')
     }
-    // Always set loading false after check — no flash possible
     setLoading(false)
+
+    getIndustries().then(({ data }) => setIndustries(data)).catch(() => {})
   }, [])
 
   const login = useCallback(async (credentials) => {
     const { data } = await apiLogin(credentials)
-    // Backend returns { status, access, refresh, user: { id, first_name, last_name, email, user_type, bussiness_name } }
     if (!data.access || !data.user) {
       throw new Error('Invalid login response from server')
     }
     localStorage.setItem('access_token', data.access)
     localStorage.setItem('refresh_token', data.refresh)
+    const role = getRoleFromToken(data.access) || data.user.user_type
     const user = {
       ...data.user,
       full_name: `${data.user.first_name || ''} ${data.user.last_name || ''}`.trim(),
-      role: data.user.user_type,
+      role,
     }
     localStorage.setItem('user', JSON.stringify(user))
     setToken(data.access)
+    setUserRole(role)
     setUser(user)
     return user
   }, [])
@@ -70,6 +84,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('user')
     setToken(null)
+    setUserRole(null)
     setUser(null)
   }, [])
 
@@ -80,7 +95,12 @@ export function AuthProvider({ children }) {
   }, [user])
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, signup, logout, updateUser, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{
+      user, token, userRole, loading,
+      login, signup, logout, updateUser,
+      isAuthenticated: !!token,
+      industries,
+    }}>
       {children}
     </AuthContext.Provider>
   )

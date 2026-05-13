@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Building2, Globe, MapPin, BadgeCheck, Save, Loader2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Building2, Globe, MapPin, Save, Loader2 } from 'lucide-react'
 import GoldButton from '../../components/common/GoldButton'
-import { formatCurrency } from '../../utils/formatCurrency'
 import { getProfile, updateProfile } from '../../api/startup'
+import { useAuth } from '../../context/AuthContext'
 
 const STAGES = ['IDEA', 'MVP', 'TRACTION', 'GROWTH', 'SCALE']
-const INDUSTRIES = ['Fintech', 'AgriTech', 'HealthTech', 'EdTech', 'Logistics', 'E-commerce', 'CleanTech', 'SaaS', 'Media', 'Other']
 
 const stageColors = {
   IDEA: 'border-slate-500 text-slate-300',
@@ -29,6 +28,8 @@ function Field({ label, children }) {
 }
 
 export default function Profile() {
+  const navigate = useNavigate()
+  const { industries } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -59,8 +60,7 @@ export default function Profile() {
         const status = err?.response?.status
         const detail = err?.response?.data?.detail || ''
         if (status === 404 && detail.includes('FOUNDER')) {
-          // Investor landed here — redirect to their dashboard
-          window.location.href = '/investor/dashboard'
+          navigate('/investor/dashboard', { replace: true })
         }
         // Any other error — still stop the spinner
       })
@@ -127,7 +127,9 @@ export default function Profile() {
                   <select value={fields.industry} onChange={set('industry')}
                     className="w-full bg-navy-900 border border-navy-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-gold-500 transition-colors">
                     <option value="">Select industry</option>
-                    {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+                    {industries.map(({ id, name }) => (
+                      <option key={id} value={id}>{name}</option>
+                    ))}
                   </select>
                 </Field>
                 <Field label="Founded Date">
@@ -208,7 +210,7 @@ export default function Profile() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="font-bold text-white text-lg">{fields.business_name || 'Your Startup Name'}</h3>
-                  <p className="text-slate-400 text-sm">{fields.industry || 'Industry'}</p>
+                  <p className="text-slate-400 text-sm">{industries.find(i => i.id === fields.industry)?.name || 'Industry'}</p>
                 </div>
                 <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${stageColors[fields.stage]}`}>
                   {fields.stage}

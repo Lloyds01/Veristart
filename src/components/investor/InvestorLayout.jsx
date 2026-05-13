@@ -8,7 +8,7 @@ const NAV = [
   { to: '/investor/dashboard', icon: LayoutDashboard, label: 'Deal Flow', end: true },
   { to: '/investor/saved', icon: Bookmark, label: 'Saved Startups' },
   { to: '/investor/portfolio', icon: Briefcase, label: 'Portfolio' },
-  { to: '/dashboard/settings', icon: Settings, label: 'Settings' },
+  { to: '/investor/settings', icon: Settings, label: 'Settings' },
 ]
 
 function SidebarContent({ onClose }) {

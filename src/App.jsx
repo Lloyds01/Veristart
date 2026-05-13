@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ToastProvider } from './context/ToastContext'
+import { StartupProvider } from './context/StartupContext'
 
-// Pages
+// Pages — public
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -12,7 +14,7 @@ import ResetPassword from './pages/ResetPassword'
 import Pricing from './pages/Pricing'
 import Waitlist from './pages/Waitlist'
 
-// Dashboard
+// Founder dashboard
 import DashboardLayout from './components/dashboard/DashboardLayout'
 import Dashboard from './pages/founder/Dashboard'
 import Profile from './pages/founder/Profile'
@@ -23,11 +25,12 @@ import FundingMarketplace from './pages/founder/FundingMarketplace'
 import Creditors from './pages/founder/Creditors'
 import Settings from './pages/founder/Settings'
 
-// Investor
+// Investor dashboard
 import InvestorLayout from './components/investor/InvestorLayout'
 import InvestorDashboard from './pages/investor/InvestorDashboard'
 import SavedStartups from './pages/investor/SavedStartups'
 import Portfolio from './pages/investor/Portfolio'
+import InvestorSettings from './pages/investor/InvestorSettings'
 
 const PageWrapper = ({ children }) => (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
@@ -46,17 +49,14 @@ const FullScreenLoader = () => (
 )
 
 function ProtectedRoute({ children, role }) {
-  const { isAuthenticated, user, loading } = useAuth()
+  const { isAuthenticated, userRole, loading } = useAuth()
 
-  // Always wait for auth check to complete before rendering anything
   if (loading) return <FullScreenLoader />
-
-  // Not authenticated — redirect to login
   if (!isAuthenticated) return <Navigate to="/login" replace />
 
-  // Wrong role — redirect to correct dashboard
-  if (role && user?.role !== role) {
-    return <Navigate to={user?.role === 'INVESTOR' ? '/investor/dashboard' : '/dashboard'} replace />
+  // Role mismatch — send to the correct dashboard
+  if (role && userRole !== role) {
+    return <Navigate to={userRole === 'INVESTOR' ? '/investor/dashboard' : '/dashboard'} replace />
   }
 
   return children
@@ -77,8 +77,17 @@ function AppRoutes() {
         <Route path="/pricing" element={<PageWrapper><Pricing /></PageWrapper>} />
         <Route path="/waitlist" element={<PageWrapper><Waitlist /></PageWrapper>} />
 
-        {/* Founder Dashboard */}
-        <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+        {/* Founder Dashboard — role-guarded, startup data injected at layout level */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute role="FOUNDER">
+              <StartupProvider>
+                <DashboardLayout />
+              </StartupProvider>
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Dashboard />} />
           <Route path="profile" element={<Profile />} />
           <Route path="team" element={<Team />} />
@@ -89,11 +98,19 @@ function AppRoutes() {
           <Route path="settings" element={<Settings />} />
         </Route>
 
-        {/* Investor Dashboard */}
-        <Route path="/investor" element={<ProtectedRoute><InvestorLayout /></ProtectedRoute>}>
+        {/* Investor Dashboard — role-guarded */}
+        <Route
+          path="/investor"
+          element={
+            <ProtectedRoute role="INVESTOR">
+              <InvestorLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="dashboard" element={<InvestorDashboard />} />
           <Route path="saved" element={<SavedStartups />} />
           <Route path="portfolio" element={<Portfolio />} />
+          <Route path="settings" element={<InvestorSettings />} />
         </Route>
 
         {/* Fallback */}
@@ -107,7 +124,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ToastProvider>
+          <AppRoutes />
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   )
